@@ -52,6 +52,23 @@ func Execute() int {
 	ui.ApplyTheme(config.Normalize(store.Current().Theme, ui.Themes(), ui.ThemeDefault))
 
 	app := &app{store: store}
+	root := newRoot(app)
+
+	// A leading `pogo <project> …` is settled here too, alongside the bare-URL
+	// shorthand it composes with: `pogo checkout https://…` is both at once.
+	// Peeling it off before anything else means every subcommand below —
+	// curl, list, new, or nothing at all — just sees app.project already set.
+	args := os.Args[1:]
+	if name, rest, created := splitProject(args, app.cfg().APIs, reservedNames(root)); name != "" {
+		if created {
+			if err := app.store.Update(func(c *config.Config) { c.APIs.SetProject(name, "") }); err != nil {
+				ui.Warn(err.Error())
+			}
+			fmt.Fprintf(os.Stderr, "pogo: created project %s\n", name)
+		}
+		app.project = name
+		args = rest
+	}
 
 	// The bare-URL shorthand is settled before Cobra sees the command line, not
 	// inside it. `pogo https://api.example.com -sS -o /dev/null` is a curl
@@ -60,7 +77,7 @@ func Execute() int {
 	//
 	// Only a first argument that parses as a URL takes this path, so no
 	// subcommand and no flag of pogo's can be swallowed by it.
-	if args := os.Args[1:]; len(args) > 0 && curlargs.LooksLikeURL(args[0]) {
+	if len(args) > 0 && curlargs.LooksLikeURL(args[0]) {
 		if err := app.runCurl(args); err != nil {
 			if code, ok := err.(exitCode); ok {
 				return int(code)
@@ -71,8 +88,7 @@ func Execute() int {
 		return 0
 	}
 
-	root := newRoot(app)
-
+	root.SetArgs(args)
 	if err := fang.Execute(context.Background(), root,
 		fang.WithColorSchemeFunc(colorScheme),
 		fang.WithVersion(version.Version),
@@ -89,7 +105,12 @@ func Execute() int {
 // code a wrapped curl left behind.
 type app struct {
 	store *config.Store[config.Config]
-	exit  int
+
+	// project is the API this invocation was prefixed with (`pogo checkout
+	// curl …`), when it was.
+	project string
+
+	exit int
 }
 
 // cfg is the configuration a command runs under: what the file says, with this
@@ -118,7 +139,13 @@ and run it again, compare two responses.
 
 Requests are grouped by the API they belong to, and hosts that differ only by
 subdomain — api.acme.com, api.staging.acme.com — are recognized as
-environments of one API rather than three unrelated hosts.`,
+environments of one API rather than three unrelated hosts. Several services on
+localhost are not, so name them:
+
+  pogo project add checkout localhost:3000
+  pogo checkout curl /orders    files under checkout, resolves the path
+  pogo checkout                 the UI, filtered to checkout
+  pogo new                      a blank request to fill in and run`,
 
 		// A URL is a valid first argument, and it is not a subcommand. Cobra
 		// would otherwise reject it before RunE ever sees it.
@@ -149,6 +176,8 @@ environments of one API rather than three unrelated hosts.`,
 		newListCmd(app),
 		newImportCmd(app),
 		newAPICmd(app),
+		newProjectCmd(app),
+		newNewCmd(app),
 		newEnvCmd(app),
 		newConfigCmd(app),
 		newCompactCmd(app),

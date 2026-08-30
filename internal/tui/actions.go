@@ -31,6 +31,26 @@ func (m *Model) doReplay() tea.Cmd {
 	return tea.Batch(replay(m.recorderFor(e), e), m.spinner.Tick)
 }
 
+func (m *Model) doNew() tea.Cmd {
+	api := m.newRequestAPI()
+	base, _ := m.cfg.APIs.Project(api)
+	return m.startNewRequest(api, base)
+}
+
+// newRequestAPI is what a blank request defaults to filing under: the project
+// pogo was opened with, or the one API the list is already narrowed to.
+// Neither is a guarantee — the URL you type can still say otherwise — just the
+// obvious guess when there is one.
+func (m *Model) newRequestAPI() string {
+	if m.project != "" {
+		return m.project
+	}
+	if len(m.query.APIs) == 1 {
+		return m.query.APIs[0]
+	}
+	return ""
+}
+
 func (m *Model) doEdit() tea.Cmd {
 	return m.startEdit(m.selected())
 }

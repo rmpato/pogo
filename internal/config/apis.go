@@ -1,6 +1,9 @@
 package config
 
-import "strings"
+import (
+	"sort"
+	"strings"
+)
 
 // APIRegistry is what the user has told pogo about the hosts in its history.
 //
@@ -29,6 +32,12 @@ type APIRegistry struct {
 	// Hidden lists API domains kept out of the sidebar and the grouped list.
 	// A CDN or a telemetry endpoint is noise once you have seen it once.
 	Hidden []string `yaml:"hidden,omitempty"`
+
+	// Projects are the APIs a user declared by name — "checkout" — rather than
+	// the ones pogo inferred from a host. The value is a base URL, so
+	// `pogo checkout curl /orders` has something to resolve against; it may be
+	// empty when the project exists only as a label so far.
+	Projects map[string]string `yaml:"projects,omitempty"`
 }
 
 // Name returns the display name for a domain, or the domain itself.
@@ -49,6 +58,24 @@ func (r APIRegistry) DomainFor(host string) (string, bool) {
 func (r APIRegistry) EnvFor(host string) (string, bool) {
 	e, ok := r.Envs[strings.ToLower(host)]
 	return e, ok && e != ""
+}
+
+// Project returns the base URL a project was declared with, and whether the
+// name is a project at all. The base may be empty for a project that exists
+// only as a label.
+func (r APIRegistry) Project(name string) (string, bool) {
+	base, ok := r.Projects[strings.ToLower(name)]
+	return base, ok
+}
+
+// ProjectNames lists every declared project, alphabetically.
+func (r APIRegistry) ProjectNames() []string {
+	names := make([]string, 0, len(r.Projects))
+	for name := range r.Projects {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	return names
 }
 
 // IsHidden reports whether an API has been hidden from the sidebar.
@@ -91,6 +118,38 @@ func (r *APIRegistry) SetHidden(domain string, hidden bool) {
 		kept = nil
 	}
 	r.Hidden = kept
+}
+
+// SetProject declares a project, or updates its base URL. Unlike the other
+// setters, an empty base is a value worth keeping rather than a signal to
+// clear the entry: a project can exist as a bare label before any request has
+// given it a host.
+func (r *APIRegistry) SetProject(name, base string) {
+	name = strings.ToLower(name)
+	if r.Projects == nil {
+		r.Projects = map[string]string{}
+	}
+	r.Projects[name] = base
+}
+
+// RemoveProject forgets a project and every host reassigned to it, so removal
+// leaves no dangling `pogo api move` behind it.
+func (r *APIRegistry) RemoveProject(name string) {
+	name = strings.ToLower(name)
+	if r.Projects != nil {
+		delete(r.Projects, name)
+		if len(r.Projects) == 0 {
+			r.Projects = nil
+		}
+	}
+	for host, domain := range r.Domains {
+		if strings.EqualFold(domain, name) {
+			delete(r.Domains, host)
+		}
+	}
+	if len(r.Domains) == 0 {
+		r.Domains = nil
+	}
 }
 
 // assign sets a key, deleting it when the value is empty so that clearing an

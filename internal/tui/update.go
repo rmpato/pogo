@@ -146,6 +146,9 @@ func (m *Model) handleListKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case key.Matches(msg, keys.Search):
 		return m, m.doSearch()
 
+	case key.Matches(msg, keys.New):
+		return m, m.doNew()
+
 	case key.Matches(msg, keys.Back):
 		return m, m.doClearSearch()
 
@@ -572,13 +575,17 @@ func (m *Model) runEditor() tea.Cmd {
 	}
 
 	parent := m.entryByID(m.editID)
+	rec := m.recorderFor(parent)
+	if parent == nil && m.edit.api != "" {
+		rec = m.recorderForDomain(m.edit.api)
+	}
 	m.screen = screenList
 	m.edit.editing, m.edit.inBody = false, false
 	m.editor.Blur()
 	m.edit.input.Blur()
 	m.busy = "running"
 	m.layout()
-	return tea.Batch(runEdited(m.recorderFor(parent), parent, args), m.spinner.Tick)
+	return tea.Batch(runEdited(rec, parent, args), m.spinner.Tick)
 }
 
 // --- diff ------------------------------------------------------------------

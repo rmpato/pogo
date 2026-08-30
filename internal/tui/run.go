@@ -20,6 +20,17 @@ type Options struct {
 	Config   *config.Store[config.Config]
 	Store    *store.Store
 	Recorder *capture.Recorder
+
+	// Project is the API a blank new request defaults to filing under, and
+	// what Filter narrows the list to when neither Filter nor Compose is set
+	// explicitly — `pogo checkout` opens on that project's history.
+	Project string
+	// Filter is a search expression applied to the list on the very first
+	// screen, e.g. "api:checkout". Empty leaves the list unfiltered.
+	Filter string
+	// Compose opens directly on a blank request instead of the list —
+	// `pogo new` and `pogo checkout new`.
+	Compose bool
 }
 
 // exitTo says where the user was going when they left a screen.
@@ -46,9 +57,25 @@ func Run(opts Options) error {
 	}
 
 	screen := screenList
+	first := true
 	for {
 		m := New(opts)
 		m.screen = screen
+
+		// Filter and Compose describe how pogo was opened this run, not a
+		// standing preference — they apply once, to the first screen shown,
+		// and never again after a trip up to the home shell and back.
+		if first {
+			first = false
+			switch {
+			case opts.Compose:
+				base, _ := m.cfg.APIs.Project(opts.Project)
+				m.startNewRequest(opts.Project, base)
+			case opts.Filter != "":
+				m.query = ParseQuery(opts.Filter).WithRegistry(m.cfg.APIs)
+				m.search.SetValue(opts.Filter)
+			}
+		}
 
 		final, err := tea.NewProgram(m, tea.WithAltScreen()).Run()
 		if err != nil {
@@ -142,8 +169,10 @@ func homeConfig(m *Model) home.Config {
 			"  pogo                     Open this shell's Requests workspace",
 			"  pogo curl <args>         Make a request, exactly as curl would",
 			"  pogo https://…           The same thing, without typing curl",
+			"  pogo new                 A blank request, ready to fill in and run",
 			"  pogo list --json         Print history for a script to read",
 			"  pogo api                 Show and correct how requests are grouped",
+			"  pogo project add <name>  Name an API pogo cannot tell apart on its own",
 			"  pogo env                 Manage the environments {{variables}} come from",
 			"  pogo import-har <file>   Bring a browser export into history",
 		},

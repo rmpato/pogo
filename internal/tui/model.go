@@ -130,6 +130,10 @@ type Model struct {
 	st  *store.Store
 	rec *capture.Recorder
 
+	// project is the API a blank new request defaults to filing under, when
+	// pogo was opened with one (`pogo checkout`, `pogo checkout new`).
+	project string
+
 	entries []*history.Entry
 	rows    []row
 	cursor  int
@@ -233,10 +237,16 @@ type Model struct {
 // was first made — and against the right API's values, since "staging" means
 // one thing for acme.com and another for the payments API.
 func (m *Model) recorderFor(e *history.Entry) *capture.Recorder {
+	return m.recorderForDomain(m.domainOf(e))
+}
+
+// recorderForDomain is recorderFor without a stored entry to read the domain
+// from — the case a blank new request is in, where the domain came from the
+// project it was composed under instead.
+func (m *Model) recorderForDomain(domain string) *capture.Recorder {
 	if m.rec == nil {
 		return nil
 	}
-	domain := m.domainOf(e)
 	rec := m.rec
 	if domain != "" {
 		rec = rec.WithAPI(domain)
@@ -277,6 +287,7 @@ func New(opts Options) *Model {
 		cfg:             cfg,
 		st:              opts.Store,
 		rec:             opts.Recorder,
+		project:         opts.Project,
 		search:          ti,
 		editor:          ta,
 		spinner:         sp,

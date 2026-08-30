@@ -230,10 +230,17 @@ func containsFold(list []string, s string) bool {
 }
 
 // classify resolves an entry to its API, falling back to what it ran as when
-// the URL is templated and cannot be read now.
+// the URL is templated and cannot be read now, or — while the project is
+// still declared — when it was filed under a project label live
+// classification cannot see on its own. See tui.withStored for why the
+// project must still exist.
 func (q Query) classify(e *history.Entry) apis.Ref {
 	ref := apis.Classify(e.Request.URL, q.reg)
-	if ref.Domain == "" && e.API != "" {
+	trust := !ref.Bound && e.API != "" && e.API != ref.Domain
+	if trust && ref.Domain != "" {
+		_, trust = q.reg.Project(e.API)
+	}
+	if trust {
 		ref.Domain = e.API
 		ref.Name = q.reg.Name(e.API)
 	}

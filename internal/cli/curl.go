@@ -85,6 +85,15 @@ func (a *app) runCurl(args []string) error {
 		cfg.Capture.Disabled = true
 	}
 
+	// Under a project prefix, a path is a request against that project's base
+	// URL, and the host it resolves to is worth remembering — the whole reason
+	// to type `pogo checkout` instead of the URL every time.
+	if a.project != "" {
+		if base, _ := cfg.APIs.Project(a.project); base != "" {
+			curlArgs = resolveRelativeURL(curlArgs, base)
+		}
+	}
+
 	var st *store.Store
 	if !cfg.Capture.Disabled {
 		if st, err = store.Open(cfg); err != nil {
@@ -103,7 +112,7 @@ func (a *app) runCurl(args []string) error {
 
 	// Environments resolve {{variables}} on the way to curl. The command that
 	// gets recorded keeps its braces, so the token never reaches history.
-	rec, err = withEnvironment(rec, cfg, curlArgs, flags)
+	rec, err = withEnvironment(rec, cfg, curlArgs, flags, a.project)
 	if err != nil {
 		return err
 	}
@@ -129,6 +138,13 @@ func (a *app) runCurl(args []string) error {
 		// curl ran; only the recording failed. The user's request succeeded and
 		// its exit status is what matters, so this is a warning, not a failure.
 		warn("could not record request: %v", runErr)
+	}
+
+	// curl having started is the bar for "this project was actually pointed at
+	// this host" — a missing binary should not mint a binding for a host
+	// nothing ever reached.
+	if a.project != "" {
+		autoBindProject(a.store, a.project, curlArgs)
 	}
 
 	// A variable the environment does not define is left in the command
@@ -161,15 +177,16 @@ func (a *app) runCurl(args []string) error {
 }
 
 // withEnvironment binds the recorder to the environment and API this request
-// should run under.
-func withEnvironment(rec *capture.Recorder, cfg config.Config, curlArgs []string, flags pogoFlags) (*capture.Recorder, error) {
+// should run under. project is the API this invocation was prefixed with
+// (`pogo checkout curl …`), if any.
+func withEnvironment(rec *capture.Recorder, cfg config.Config, curlArgs []string, flags pogoFlags, project string) (*capture.Recorder, error) {
 	set, err := environment.Load(config.EnvFile())
 	if err != nil {
 		return nil, err
 	}
 
 	envName := firstNonEmpty(flags.env, os.Getenv("POGO_ENV"), set.Active)
-	domain := resolveAPI(set, cfg, curlArgs, envName, flags)
+	domain := resolveAPI(set, cfg, curlArgs, envName, flags, project)
 
 	if domain != "" {
 		rec = rec.WithAPI(domain)
@@ -189,15 +206,24 @@ func withEnvironment(rec *capture.Recorder, cfg config.Config, curlArgs []string
 //
 // Usually the URL says so outright. When it does not — because the host is
 // itself a variable, which is the whole reason `{{base}}/users` is worth
-// writing — pogo asks, in order: what you said on the command line, what
-// POGO_API says, and finally whether exactly one API defines every variable the
-// command mentions. That last rule is the common case (one API owns `base` and
-// `token`), and it is deliberately narrow: two candidates means pogo picks
-// neither and leaves the braces in, which fails loudly instead of quietly
-// calling the wrong environment.
-func resolveAPI(set environment.Set, cfg config.Config, curlArgs []string, envName string, flags pogoFlags) string {
+// writing — pogo asks, in order: what you said on the command line, the
+// project it was prefixed with, what POGO_API says, and finally whether
+// exactly one API defines every variable the command mentions. That last rule
+// is the common case (one API owns `base` and `token`), and it is
+// deliberately narrow: two candidates means pogo picks neither and leaves the
+// braces in, which fails loudly instead of quietly calling the wrong
+// environment.
+//
+// A project outranks the URL, not just the fallback: `pogo checkout curl
+// https://api.stripe.com/…` files under checkout, the same as --pogo-api
+// would, because the prefix is a deliberate label rather than a guess the URL
+// could contradict.
+func resolveAPI(set environment.Set, cfg config.Config, curlArgs []string, envName string, flags pogoFlags, project string) string {
 	if flags.api != "" {
 		return apis.Domain(flags.api)
+	}
+	if project != "" {
+		return apis.Domain(project)
 	}
 	if v := os.Getenv("POGO_API"); v != "" {
 		return apis.Domain(v)
@@ -235,6 +261,94 @@ func resolveAPI(set environment.Set, cfg config.Config, curlArgs []string, envNa
 		found = domain
 	}
 	return found
+}
+
+// resolveRelativeURL turns a path-only operand into a full URL against base,
+// so `pogo checkout curl /orders` reaches the project's host without anyone
+// typing it out. curl itself has no use for a bare path — curlargs does not
+// even recognize one as a URL, precisely because it never used to mean
+// anything — so this only ever makes a command more capable, never less.
+//
+// It finds the first operand the same way curl would: skipping option flags
+// and the values they consume, honoring `--`. Only that first operand is ever
+// rewritten, matching pogo's own idea of "the" URL elsewhere (curlargs.Spec.URL).
+func resolveRelativeURL(curlArgs []string, base string) []string {
+	out := append([]string(nil), curlArgs...)
+	afterOptions := false
+	for i := 0; i < len(out); i++ {
+		a := out[i]
+		if !afterOptions {
+			if a == "--" {
+				afterOptions = true
+				continue
+			}
+			if strings.HasPrefix(a, "-") {
+				if curlargs.OptionTakesValue(a) {
+					i++
+				}
+				continue
+			}
+		}
+		if strings.HasPrefix(a, "/") {
+			out[i] = strings.TrimSuffix(base, "/") + a
+		}
+		return out
+	}
+	return out
+}
+
+// autoBindProject remembers the host a project was just pointed at, the first
+// time it sees it: `pogo checkout curl http://localhost:3000/x` means every
+// later request to that host — prefixed or not — belongs to checkout too.
+// Only loopback and private hosts are bound automatically; a public host
+// pinned this way would silently swallow whatever the URL actually says.
+func autoBindProject(cfgStore *config.Store[config.Config], project string, curlArgs []string) {
+	spec := curlargs.Parse(curlArgs)
+	url := spec.URL()
+	if url == "" || strings.Contains(url, "{{") {
+		return
+	}
+	host := strings.ToLower(history.HostOf(url))
+	if host == "" {
+		return
+	}
+	switch apis.GuessEnv(host) {
+	case apis.EnvLocal, apis.EnvDev:
+	default:
+		return
+	}
+	if _, bound := cfgStore.Current().APIs.DomainFor(host); bound {
+		return
+	}
+
+	if err := cfgStore.Update(func(c *config.Config) {
+		c.APIs.SetDomain(host, project)
+		if base, _ := c.APIs.Project(project); base == "" {
+			if origin := urlOrigin(url); origin != "" {
+				c.APIs.SetProject(project, origin)
+			}
+		}
+	}); err != nil {
+		return
+	}
+	warn("%s is now part of %s", host, project)
+}
+
+// urlOrigin is the scheme and host of a URL, with no path — a base a relative
+// operand can be resolved against.
+func urlOrigin(raw string) string {
+	scheme, rest, ok := strings.Cut(raw, "://")
+	if !ok {
+		return ""
+	}
+	host := rest
+	if i := strings.IndexAny(host, "/?#"); i >= 0 {
+		host = host[:i]
+	}
+	if host == "" {
+		return ""
+	}
+	return scheme + "://" + host
 }
 
 // extractFlags removes pogo's own options from the argument list. Everything

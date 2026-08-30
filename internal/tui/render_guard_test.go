@@ -72,6 +72,7 @@ func TestEveryFrameIsExactlyTheTerminal(t *testing.T) {
 		"list":     func(m *Model) { m.screen = screenList },
 		"detail":   func(m *Model) { m.screen = screenDetail },
 		"edit":     func(m *Model) { m.startEdit(m.selected()) },
+		"new":      func(m *Model) { m.doNew() },
 		"diff":     func(m *Model) { m.screen = screenDiff },
 		"apis":     func(m *Model) { m.doAPIs() },
 		"settings": func(m *Model) { m.doSettings() },

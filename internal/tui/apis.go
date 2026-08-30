@@ -33,9 +33,19 @@ func (m *Model) apiRef(e *history.Entry) apis.Ref {
 	return m.withStored(ref, e)
 }
 
-// withStored fills in what a templated URL could not say.
+// withStored fills in what a templated URL could not say, and restores what a
+// request ran under when live classification disagrees with it — the case a
+// project label produces against a host Classify can otherwise resolve on its
+// own (a public one, say). A URL with nothing live to go on always trusts the
+// stored value; a resolvable one only does while the project it names is
+// still declared, so `pogo project rm` really does return its old entries to
+// being classified from the host, the way they would have been without it.
 func (m *Model) withStored(ref apis.Ref, e *history.Entry) apis.Ref {
-	if ref.Domain == "" && e.API != "" {
+	trust := !ref.Bound && e.API != "" && e.API != ref.Domain
+	if trust && ref.Domain != "" {
+		_, trust = m.cfg.APIs.Project(e.API)
+	}
+	if trust {
 		ref.Domain = e.API
 		ref.Name = m.cfg.APIs.Name(e.API)
 		if ref.Env == "" {

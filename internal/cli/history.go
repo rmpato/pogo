@@ -51,6 +51,9 @@ Search expressions are the same ones the UI's / key takes:
 			if err != nil {
 				return err
 			}
+			if app.project != "" {
+				filter = strings.TrimSpace("api:" + app.project + " " + filter)
+			}
 			return printList(cfg, st, filter, limit, asJSON)
 		},
 	}

@@ -83,6 +83,13 @@ type Ref struct {
 	// a guess. The UI says so, because a guess the user has not checked and a
 	// fact they stated are not the same thing.
 	Pinned bool
+	// Bound reports that Domain came from an explicit reassignment
+	// (config.APIRegistry.Domains) rather than the registrable-domain rule. A
+	// caller with its own record of which API a request ran under — the
+	// stored history.Entry.API — should still prefer a bound Domain over that
+	// record, because a bound host is a standing fact and a stored API is a
+	// one-time observation.
+	Bound bool
 }
 
 // Classify works out the API and environment for a URL.
@@ -99,7 +106,7 @@ func Classify(rawURL string, reg config.APIRegistry) Ref {
 	ref := Ref{Host: host}
 
 	if domain, ok := reg.DomainFor(host); ok {
-		ref.Domain = strings.ToLower(domain)
+		ref.Domain, ref.Bound = strings.ToLower(domain), true
 	} else {
 		ref.Domain = Domain(host)
 	}

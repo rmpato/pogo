@@ -38,6 +38,7 @@ the same registry — it cannot go stale.
 | `A` | APIs and environments |
 | `r` | Replay |
 | `e` | Edit, then run |
+| `n` | New request — a blank one, ready to fill in and run |
 | `y` | Copy menu |
 | `s` | Star / unstar |
 | `c` | File under a collection |

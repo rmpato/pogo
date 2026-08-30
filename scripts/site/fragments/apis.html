@@ -10,6 +10,7 @@
     <a href="#grouping">How the grouping works</a>
     <a href="#reading">Reading the hostname</a>
     <a href="#correcting">Correcting a guess</a>
+    <a href="#projects">Projects</a>
     <a href="#variables">Variables</a>
     <a href="#across">Replaying across environments</a>
   </div>
@@ -175,6 +176,36 @@ localhost                       1 requests
     <img src="img/pogo-apis.svg" width="1140" height="490" loading="lazy"
          alt="pogo's APIs workspace: acme.com listed with prod, staging and dev beneath it, each showing its hosts and request counts, with a detail pane naming which hosts were guessed and which were pinned.">
   </figure>
+</section>
+
+<hr class="rule">
+
+<section id="projects">
+  <span class="kicker">when there is no domain to read</span>
+  <h2>Projects: naming an API before pogo can guess it</h2>
+
+  <p>
+    One API per domain breaks down on <code>localhost</code> — three services on
+    three ports are one guessed API, not three. A project is an API you declare
+    instead of one pogo works out, so a prefix says which is which.
+  </p>
+
+  <div class="win rise">
+    <div class="win-bar"><i></i><i></i><i></i><b>pogo checkout</b></div>
+<pre><span class="c">$</span> <span class="k">pogo</span> project add checkout localhost:3000
+<span class="c">$</span> <span class="k">pogo</span> checkout curl /orders    <span class="c"># → http://localhost:3000/orders, filed under checkout</span>
+<span class="c">$</span> <span class="k">pogo</span> checkout                 <span class="c"># the UI, filtered to checkout</span>
+<span class="c">$</span> <span class="k">pogo</span> new                       <span class="c"># a blank request to fill in and run</span></pre>
+  </div>
+
+  <p class="dim">
+    The first request run under a name pogo has not seen creates the project on
+    the spot — <code>project add</code> is only for giving one a base URL up
+    front. A project run against a loopback or private host binds that host to
+    it permanently, the same as <code>pogo api move</code> would by hand; run
+    against a public host it is just a label — <code>checkout</code> groups
+    together, and the real domain is never touched.
+  </p>
 </section>
 
 <hr class="rule">

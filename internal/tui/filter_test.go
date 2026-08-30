@@ -4,6 +4,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/rmpato/pogo/internal/config"
 	"github.com/rmpato/pogo/internal/curlargs"
 	"github.com/rmpato/pogo/internal/history"
 )
@@ -123,6 +124,29 @@ func TestEmptyQueryMatchesEverything(t *testing.T) {
 	}
 	if !ParseQuery("   ").Empty() {
 		t.Error("whitespace should produce an empty query")
+	}
+}
+
+// A project label filed a request under itself even though the URL resolves
+// fine on its own (a public host). That should win over the guess — but only
+// for as long as the project is still declared; once it is removed, the old
+// entry should read exactly as it would have without the project ever
+// existing.
+func TestClassifyTrustsAProjectLabelOnlyWhileItExists(t *testing.T) {
+	e := entryFor("GET", "https://example.com/x", 200, 0, false)
+	e.API = "checkout"
+
+	var reg config.APIRegistry
+	reg.SetProject("checkout", "")
+	q := ParseQuery("").WithRegistry(reg)
+	if ref := q.classify(e); ref.Domain != "checkout" {
+		t.Errorf("domain = %q, want checkout while the project exists", ref.Domain)
+	}
+
+	reg.RemoveProject("checkout")
+	q = ParseQuery("").WithRegistry(reg)
+	if ref := q.classify(e); ref.Domain != "example.com" {
+		t.Errorf("domain = %q, want example.com once the project is removed", ref.Domain)
 	}
 }
 

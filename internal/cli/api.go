@@ -164,9 +164,19 @@ func listAPIs(app *app) error {
 	refs := make([]apis.Ref, 0, len(res.Entries))
 	for _, e := range res.Entries {
 		ref := apis.Classify(e.Request.URL, cfg.APIs)
-		if ref.Domain == "" && e.API != "" {
-			// A templated URL cannot be classified now; use what it ran as.
-			ref = apis.Ref{Domain: e.API, Name: cfg.APIs.Name(e.API), Env: e.Env}
+		trust := !ref.Bound && e.API != "" && e.API != ref.Domain
+		if trust && ref.Domain != "" {
+			// The URL resolves on its own; only a project still on file is
+			// worth trusting over that — once removed, its old entries should
+			// read the way they would have without it.
+			_, trust = cfg.APIs.Project(e.API)
+		}
+		if trust {
+			ref.Domain = e.API
+			ref.Name = cfg.APIs.Name(e.API)
+			if ref.Env == "" {
+				ref.Env = e.Env
+			}
 		}
 		refs = append(refs, ref)
 	}

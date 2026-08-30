@@ -362,6 +362,8 @@ func (m *Model) emptyHistory(width, height int) string {
 		styMuted.Render("pogo passes everything through to curl, so any curl"),
 		styMuted.Render("command works and every one of them lands here."),
 		"",
+		styMuted.Render("Or press ") + styKey.Render("n") + styMuted.Render(" to start a blank request right here."),
+		"",
 		styFaint.Render("history: " + m.st.Path()),
 	}
 	return m.centerNotice(width, height, strings.Join(lines, "\n"))

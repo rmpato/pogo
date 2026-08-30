@@ -460,6 +460,67 @@ func TestEditDoesNotMutateOriginal(t *testing.T) {
 	}
 }
 
+func TestNewOpensABlankEditor(t *testing.T) {
+	m := newTestModel(t) // an empty history: composing must not need a selection
+
+	press(m, "n")
+	if m.screen != screenEdit {
+		t.Fatal("n should open the editor")
+	}
+	if m.editID != "" {
+		t.Error("a new request has no parent entry")
+	}
+	if !strings.Contains(m.View(), "NEW REQUEST") {
+		t.Error("the heading should say this is a new request, not an edit")
+	}
+	if m.edit.form.Method != "GET" {
+		t.Errorf("method = %q, want GET", m.edit.form.Method)
+	}
+}
+
+// n defaults to filing under whatever the list is already narrowed to — the
+// project pogo was opened with, or a single api: filter — so composing from
+// inside a project does not require retyping it.
+func TestNewDefaultsToTheActiveProjectFilter(t *testing.T) {
+	m := newTestModel(t, sampleEntries()...)
+	m.applyFilter("api:checkout")
+
+	press(m, "n")
+	if m.edit.api != "checkout" {
+		t.Errorf("edit.api = %q, want checkout", m.edit.api)
+	}
+}
+
+// A project declared with a base URL prefills it, so the common case —
+// hitting the same local service repeatedly — is nothing but a path to type.
+func TestNewPrefillsTheProjectsBaseURL(t *testing.T) {
+	m := newTestModel(t)
+	m.project = "checkout"
+	m.cfg.APIs.SetProject("checkout", "http://localhost:3000")
+
+	press(m, "n")
+	if m.edit.form.URL != "http://localhost:3000" {
+		t.Errorf("prefilled URL = %q, want the project's base", m.edit.form.URL)
+	}
+}
+
+// Composing a blank request and running it takes the same path an edited one
+// does: back to the list, busy, with the run handed off as a command.
+func TestNewRunsLikeAnEditedRequest(t *testing.T) {
+	m := newTestModel(t)
+
+	press(m, "n")
+	m.edit.form.URL = "http://localhost:3000/orders"
+	press(m, "ctrl+r")
+
+	if m.screen != screenList {
+		t.Error("running should return to the list")
+	}
+	if m.busy == "" {
+		t.Error("running should show a busy indicator while it is in flight")
+	}
+}
+
 func TestEmptyHistoryShowsGuidance(t *testing.T) {
 	m := newTestModel(t)
 	view := m.View()

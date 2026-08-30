@@ -75,6 +75,7 @@ dependency.
 pogo                          # the UI, over everything you have run
 pogo curl -sS https://…       # wrap curl and record it
 pogo https://api.acme.com/me  # the same thing, without typing curl
+pogo new                      # a blank request, ready to fill in and run
 pogo list --json | jq         # history, for a script to read
 pogo api                      # show and correct how requests are grouped
 pogo env                      # the variables requests resolve against
@@ -86,6 +87,15 @@ option — present or future — can ever collide with one:
 
 ```bash
 pogo curl --pogo-note 'the one that worked' --pogo-env staging https://…
+```
+
+Several services on `localhost` are not one API, they are several — so name
+the ones pogo cannot tell apart on its own:
+
+```bash
+pogo project add checkout localhost:3000
+pogo checkout curl /orders    # resolves against the project's base URL
+pogo checkout                 # the UI, filtered to checkout
 ```
 
 `H` from anywhere in the UI opens the shell above it — the workspaces that are

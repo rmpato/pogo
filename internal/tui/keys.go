@@ -22,6 +22,7 @@ type keyMap struct {
 
 	Replay key.Binding
 	Edit   key.Binding
+	New    key.Binding
 	Search key.Binding
 	Copy   key.Binding
 	Star   key.Binding
@@ -66,6 +67,7 @@ var keys = keyMap{
 
 	Replay: key.NewBinding(key.WithKeys("r"), key.WithHelp("r", "replay")),
 	Edit:   key.NewBinding(key.WithKeys("e"), key.WithHelp("e", "edit")),
+	New:    key.NewBinding(key.WithKeys("n"), key.WithHelp("n", "new request")),
 	Search: key.NewBinding(key.WithKeys("/"), key.WithHelp("/", "search")),
 	Copy:   key.NewBinding(key.WithKeys("y"), key.WithHelp("y", "copy")),
 	Star:   key.NewBinding(key.WithKeys("s"), key.WithHelp("s", "star")),
@@ -166,7 +168,7 @@ func (m *Model) footerHints() []hint {
 		}
 		hints := []hint{
 			{"↑↓", "navigate"}, {"⏎", "inspect"}, {"r", "replay"}, {"e", "edit"},
-			{"/", "search"}, {"A", "APIs"},
+			{"n", "new"}, {"/", "search"}, {"A", "APIs"},
 		}
 		if m.showSidebar() {
 			hints = append(hints, hint{"tab", "sidebar"})

@@ -59,6 +59,12 @@ func (m *Model) commands() []command {
 			run:   func(m *Model) tea.Cmd { return m.doEdit() },
 		},
 		{
+			id: "new", group: "Request", keys: "n",
+			title: "New request",
+			desc:  "compose a blank one, filed under a project or API",
+			run:   func(m *Model) tea.Cmd { return m.doNew() },
+		},
+		{
 			id: "copy", group: "Request", keys: "y",
 			title: "Copy…",
 			desc:  "curl command, URL, headers, request or response body",

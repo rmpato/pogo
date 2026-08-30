@@ -4,6 +4,7 @@ import (
 	"reflect"
 	"testing"
 
+	"github.com/rmpato/pogo/internal/config"
 	"github.com/rmpato/pogo/internal/curlargs"
 )
 
@@ -71,7 +72,7 @@ func TestShorthandNeverSwallowsACommand(t *testing.T) {
 	for _, name := range []string{
 		"curl", "list", "import-har", "api", "env", "config",
 		"compact", "update", "where", "help", "completion",
-		"--help", "-h", "--version", "lst",
+		"project", "new", "--help", "-h", "--version", "lst",
 	} {
 		if curlargs.LooksLikeURL(name) {
 			t.Errorf("%q would be treated as a URL and handed to curl", name)
@@ -85,5 +86,90 @@ func TestShorthandNeverSwallowsACommand(t *testing.T) {
 		if !curlargs.LooksLikeURL(url) {
 			t.Errorf("%q should be recognized as a request", url)
 		}
+	}
+}
+
+// splitProject decides whether `pogo <word> …` is a project prefix. Getting
+// this wrong in either direction is bad: too eager, and a typo silently forks
+// history into a new project; too strict, and the whole point of the prefix
+// — not having to spell out --pogo-api — is lost.
+func TestSplitProject(t *testing.T) {
+	reserved := map[string]bool{"curl": true, "list": true, "new": true, "project": true, "help": true}
+	known := config.APIRegistry{Projects: map[string]string{"checkout": "http://localhost:3000"}}
+
+	cases := []struct {
+		name        string
+		args        []string
+		reg         config.APIRegistry
+		wantProject string
+		wantRest    []string
+		wantCreated bool
+	}{
+		{"known project, curl", []string{"checkout", "curl", "/orders"}, known, "checkout", []string{"curl", "/orders"}, false},
+		{"known project, bare", []string{"checkout"}, known, "checkout", nil, false},
+		{"known project, url shorthand", []string{"checkout", "http://localhost:3000/x"}, known, "checkout", []string{"http://localhost:3000/x"}, false},
+		{"known project, list", []string{"checkout", "list", "-n", "5"}, known, "checkout", []string{"list", "-n", "5"}, false},
+		{"known project, new", []string{"checkout", "new"}, known, "checkout", []string{"new"}, false},
+		{"unknown + curl creates", []string{"scratch", "curl", "http://localhost:8080/x"}, known, "scratch", []string{"curl", "http://localhost:8080/x"}, true},
+		{"unknown + url creates", []string{"scratch", "http://localhost:8080/x"}, known, "scratch", []string{"http://localhost:8080/x"}, true},
+		{"unknown + new creates", []string{"scratch", "new"}, known, "scratch", []string{"new"}, true},
+		{"unknown bare does not create", []string{"scratch"}, known, "", []string{"scratch"}, false},
+		{"unknown + list does not create", []string{"scratch", "list"}, known, "", []string{"scratch", "list"}, false},
+		{"a real subcommand is never a project", []string{"list", "-n", "5"}, known, "", []string{"list", "-n", "5"}, false},
+		{"a URL is never a project", []string{"http://localhost:3000/x"}, known, "", []string{"http://localhost:3000/x"}, false},
+		{"a flag is never a project", []string{"-sS", "checkout"}, known, "", []string{"-sS", "checkout"}, false},
+		{"no args", nil, known, "", nil, false},
+	}
+
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			gotProject, gotRest, gotCreated := splitProject(c.args, c.reg, reserved)
+			if gotProject != c.wantProject || !reflect.DeepEqual(gotRest, c.wantRest) || gotCreated != c.wantCreated {
+				t.Errorf("splitProject(%q) = (%q, %q, %v), want (%q, %q, %v)",
+					c.args, gotProject, gotRest, gotCreated, c.wantProject, c.wantRest, c.wantCreated)
+			}
+		})
+	}
+}
+
+func TestResolveRelativeURL(t *testing.T) {
+	cases := []struct {
+		name string
+		args []string
+		base string
+		want []string
+	}{
+		{
+			name: "relative path resolves against the base",
+			args: []string{"-X", "POST", "/orders"},
+			base: "http://localhost:3000",
+			want: []string{"-X", "POST", "http://localhost:3000/orders"},
+		},
+		{
+			name: "a trailing slash on the base is not doubled",
+			args: []string{"/orders"},
+			base: "http://localhost:3000/",
+			want: []string{"http://localhost:3000/orders"},
+		},
+		{
+			name: "an absolute URL is left alone",
+			args: []string{"https://api.stripe.com/v1/charges"},
+			base: "http://localhost:3000",
+			want: []string{"https://api.stripe.com/v1/charges"},
+		},
+		{
+			name: "a path that is an option's value is left alone",
+			args: []string{"-o", "/orders", "http://localhost:3000/health"},
+			base: "http://localhost:3000",
+			want: []string{"-o", "/orders", "http://localhost:3000/health"},
+		},
+	}
+
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			if got := resolveRelativeURL(c.args, c.base); !reflect.DeepEqual(got, c.want) {
+				t.Errorf("resolveRelativeURL(%q, %q) = %q, want %q", c.args, c.base, got, c.want)
+			}
+		})
 	}
 }

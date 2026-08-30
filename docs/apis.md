@@ -64,6 +64,34 @@ rather than with your history.
 In the UI, `A` opens the same thing with the keys beside it: `p` pins every host
 in an environment, `n` names an API, `x` hides one, `⏎` shows its requests.
 
+## Projects: naming an API before pogo can guess it
+
+The one API-per-domain rule breaks down on `localhost`: three services on
+three ports are one guessed API, `localhost`, not three. A project is an API
+you declare instead of one pogo works out, so a prefix says which is which:
+
+```bash
+pogo project add checkout localhost:3000
+pogo checkout curl /orders    # → http://localhost:3000/orders, filed under checkout
+pogo checkout list            # history, filtered to checkout
+pogo checkout                 # the UI, filtered to checkout
+pogo new                      # a blank request to fill in and run
+```
+
+The first request run under a name pogo has not seen creates the project on
+the spot — `pogo project add` is only needed to give one a base URL up front,
+or to declare one before its first request. A project run against a loopback
+or private host binds that host to it permanently, the same as `pogo api move`
+would by hand, so an unprefixed `pogo curl http://localhost:3000/…` keeps
+landing in the same place afterward. A project run against a public host is
+just a label — `pogo checkout curl https://api.stripe.com/…` groups under
+`checkout`, and stripe.com is never touched.
+
+`pogo project list` shows every declared project, its base URL, the hosts
+bound to it, and how many requests it has. `pogo project rm <name>` forgets
+it and unbinds its hosts; the history already filed under it stays exactly
+where it is.
+
 ## Searching by it
 
 ```

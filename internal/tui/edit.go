@@ -53,6 +53,11 @@ type editState struct {
 	have    curledit.Form // the form as read from args
 	form    curledit.Form // the form being edited
 
+	// api is the project or API a blank request will be filed under when it
+	// runs. It is empty for a request opened from an existing entry, whose
+	// domain is read off that entry instead; see Model.recorderFor.
+	api string
+
 	rows   []editRow
 	cursor int
 
@@ -107,6 +112,31 @@ func (m *Model) startEdit(e *history.Entry) tea.Cmd {
 	m.detail.req.reset()
 	m.detail.res.reset()
 	return loadBodies(m.st, e)
+}
+
+// startNewRequest opens the editor on a blank request, to be filed under api
+// when it runs — the entry point for composing something pogo has never seen,
+// rather than changing something it already recorded. base prefills the URL
+// when the project it belongs to has one on file.
+func (m *Model) startNewRequest(api, base string) tea.Cmd {
+	in := textinput.New()
+	in.Prompt = ""
+	in.CharLimit = 0
+
+	m.edit = editState{
+		have:  curledit.Form{Method: "GET"},
+		form:  curledit.Form{Method: "GET", URL: base},
+		api:   api,
+		input: in,
+	}
+	m.edit.rebuild()
+	m.edit.cursor = 1 // the URL row; the method is rarely what needs typing first
+
+	m.editID = ""
+	m.screen = screenEdit
+	m.editor.SetValue("")
+	m.layout()
+	return nil
 }
 
 func cloneForm(f curledit.Form) curledit.Form {
@@ -276,15 +306,26 @@ func (m *Model) renderEdit(width, height int) string {
 	var b strings.Builder
 
 	parent := m.entryByID(m.editID)
-	b.WriteString(styHeading.Render("EDIT & RUN"))
-	if parent != nil {
+	switch {
+	case parent != nil:
+		b.WriteString(styHeading.Render("EDIT & RUN"))
 		b.WriteString(styFaint.Render("  ·  based on "))
 		b.WriteString(methodStyle(parent.Request.Method).Render(parent.Request.Method))
 		b.WriteString(" ")
 		b.WriteString(styMuted.Render(truncateMiddle(m.displayURL(parent), maxInt(20, width-46))))
+		b.WriteString("\n")
+		b.WriteString(styFaint.Render("The original stays untouched; running this records a new entry."))
+	case m.edit.api != "":
+		b.WriteString(styHeading.Render("NEW REQUEST"))
+		b.WriteString(styFaint.Render("  ·  will be filed under "))
+		b.WriteString(styMuted.Render(m.edit.api))
+		b.WriteString("\n")
+		b.WriteString(styFaint.Render("Running this records it as a new entry."))
+	default:
+		b.WriteString(styHeading.Render("NEW REQUEST"))
+		b.WriteString("\n")
+		b.WriteString(styFaint.Render("Running this records it as a new entry, filed under whatever the URL says."))
 	}
-	b.WriteString("\n")
-	b.WriteString(styFaint.Render("The original stays untouched; running this records a new entry."))
 	b.WriteString("\n\n")
 
 	if m.edit.raw {

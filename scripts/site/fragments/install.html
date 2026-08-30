@@ -67,8 +67,10 @@
 <pre><span class="c">$</span> <span class="k">pogo</span>                          <span class="c"># the UI, over everything you have run</span>
 <span class="c">$</span> <span class="k">pogo</span> curl <span class="f">-sS</span> https://…        <span class="c"># wrap curl and record it</span>
 <span class="c">$</span> <span class="k">pogo</span> https://api.acme.com/me   <span class="c"># the same thing, without typing curl</span>
+<span class="c">$</span> <span class="k">pogo</span> new                      <span class="c"># a blank request, ready to fill in and run</span>
 <span class="c">$</span> <span class="k">pogo</span> list <span class="f">--json</span> | jq          <span class="c"># history, for a script to read</span>
 <span class="c">$</span> <span class="k">pogo</span> api                      <span class="c"># show and correct the grouping</span>
+<span class="c">$</span> <span class="k">pogo</span> project add checkout localhost:3000 <span class="c"># name an API pogo cannot guess</span>
 <span class="c">$</span> <span class="k">pogo</span> env                      <span class="c"># the variables requests resolve against</span>
 <span class="c">$</span> <span class="k">pogo</span> import-har out.har       <span class="c"># bring in what the browser did</span>
 <span class="c">$</span> <span class="k">pogo</span> compact                  <span class="c"># rewrite the log, drop deleted entries</span>
